@@ -37,36 +37,29 @@ jobs:
       # Docker Image Build
       - name: Build Docker Image
         run: |
-          docker build -t actions-app:${{ github.sha}} .
-          docker tag actions-app:${{ github.sha}} ${{ secrets.ECR_REPOSITORY_URI}}/actions-cicd:latest
-          docker tag actions-app:${{ github.sha}} ${{ secrets.DOCKERHUB_USERNAME }}/actions-cicd:latest
+          docker build -t actions-app:${{ github.sha }} .
+          docker tag actions-app:${{ github.sha }} ${{ secrets.ACR_LOGIN_SERVER }}/actions-cicd:latest
+          docker tag actions-app:${{ github.sha }} ${{ secrets.DOCKERHUB_USERNAME }}/actions-cicd:latest
 
       # Trivy Scan
       - name: Trivy Scan
         run: docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image actions-app:${{ github.sha}}
       
-      # Set up AWS Credentials
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v2
+      # Set up Azure Credentials (Azure CLI)
+      - name: Azure Login
+        uses: azure/login@v2
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      # Log in to Amazon ECR
-      - name: Log in to Amazon ECR
-        run: |
-          aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.ECR_REPOSITORY_URI }}
+      # Log in to Azure Container Registry (ACR)
+      - name: Log in to Azure Container Registry
+        run: az acr login --name ${{ secrets.ACR_NAME }}
 
-      # Push image to Amazon ECR
-      - name: Push image to Amazon ECR
+      # Push image to Azure Container Registry (ACR)
+      - name: Push image to Azure Container Registry
         run: |
-          docker push ${{ secrets.ECR_REPOSITORY_URI}}/actions-cicd:latest
-        env:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
-  
+          docker push ${{ secrets.ACR_LOGIN_SERVER }}/actions-cicd:latest
+
       # Log in to DockerHub
       - name: Log in to DockerHub
         uses: docker/login-action@v2
@@ -79,19 +72,19 @@ jobs:
         run: |
           docker push ${{ secrets.DOCKERHUB_USERNAME }}/actions-cicd:latest
 
-      # Update Kubeconfig
-      - name: Update kubeconfig
-        run: aws eks --region ${{ secrets.AWS_REGION }} update-kubeconfig --name actions-eks-cluster
+      # Set up kubectl
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
 
-      # Install kubectl
-      - name: Install kubectl
-        run: |
-          curl -o kubectl https://amazon-eks.s3.us-west-2.amazonaws.com/1.21.2/2021-07-05/bin/linux/amd64/kubectl
-          chmod +x ./kubectl
-          sudo mv ./kubectl /usr/local/bin/kubectl
+      # Update Kubeconfig for Azure Kubernetes Service (AKS)
+      - name: Set AKS context
+        uses: azure/aks-set-context@v4
+        with:
+          resource-group: ${{ secrets.AKS_RESOURCE_GROUP }}
+          cluster-name: ${{ secrets.AKS_CLUSTER_NAME }}
 
-      # Deploy to Amazon EKS
-      - name: Deploy to EKS
+      # Deploy to Azure Kubernetes Service (AKS)
+      - name: Deploy to AKS
         run: |
           kubectl apply -f k8s-manifests/deployment.yaml
           kubectl apply -f k8s-manifests/service.yaml
