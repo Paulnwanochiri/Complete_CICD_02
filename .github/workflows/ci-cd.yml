@@ -15,4 +15,14 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: Actions/checkout@v3 
+        uses: Actions/checkout@v3
+
+      # Set up NodeJS
+      - name: Set up NodeJS
+        uses: actions/setup-node@v3
+        with:
+          node-version: '14'
+
+       #Install NodeJS dependencies
+      - names: Install NodeJS dependencies
+        run: npm install 
